@@ -48,6 +48,28 @@ const map = leaflet.map(mapDiv, {
   scrollWheelZoom: false,
 });
 
+// Helper to compute lat/lng bounds of a grid cell (i, j)
+function cellBounds(i: number, j: number): leaflet.LatLngBoundsExpression {
+  const origin = CLASSROOM_LATLNG;
+  return [
+    [origin.lat + i * TILE_DEGREES, origin.lng + j * TILE_DEGREES],
+    [origin.lat + (i + 1) * TILE_DEGREES, origin.lng + (j + 1) * TILE_DEGREES],
+  ];
+}
+
+// Draw a visible grid over the neighborhood
+for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
+  for (let j = -NEIGHBORHOOD_SIZE; j < NEIGHBORHOOD_SIZE; j++) {
+    leaflet
+      .rectangle(cellBounds(i, j), {
+        color: "#888",
+        weight: 1,
+        fillOpacity: 0,
+      })
+      .addTo(map);
+  }
+}
+
 // Populate the map with a background tile layer
 leaflet
   .tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
