@@ -37,6 +37,18 @@ const GAMEPLAY_ZOOM_LEVEL = 19;
 const TILE_DEGREES = 1e-4;
 const NEIGHBORHOOD_SIZE = 8;
 const CACHE_SPAWN_PROBABILITY = 0.1;
+const INTERACTION_RADIUS_CELLS = 3;
+
+function latToIndex(lat: number): number {
+  return Math.floor((lat - CLASSROOM_LATLNG.lat) / TILE_DEGREES);
+}
+
+function lngToIndex(lng: number): number {
+  return Math.floor((lng - CLASSROOM_LATLNG.lng) / TILE_DEGREES);
+}
+
+const PLAYER_I = latToIndex(CLASSROOM_LATLNG.lat);
+const PLAYER_J = lngToIndex(CLASSROOM_LATLNG.lng);
 
 // Create the map (element with id "map" is defined in index.html)
 const map = leaflet.map(mapDiv, {
@@ -66,35 +78,53 @@ function cellCenterLatLng(i: number, j: number): leaflet.LatLng {
   );
 }
 
-// Draw a visible grid over the neighborhood
-for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
-  for (let j = -NEIGHBORHOOD_SIZE; j < NEIGHBORHOOD_SIZE; j++) {
-    // Draw the cell outline
-    leaflet
-      .rectangle(cellBounds(i, j), {
-        color: "#888",
-        weight: 1,
-        fillOpacity: 0,
-      })
-      .addTo(map);
+function drawVisibleGrid() {
+  const bounds = map.getBounds();
 
-    // Decide if this cell has a token (same rule as cache spawning)
-    const hasToken = luck([i, j].toString()) < CACHE_SPAWN_PROBABILITY;
+  // Convert visible lat/lng to cell indices
+  const iMin = latToIndex(bounds.getSouth());
+  const iMax = latToIndex(bounds.getNorth());
+  const jMin = lngToIndex(bounds.getWest());
+  const jMax = lngToIndex(bounds.getEast());
 
-    // If it has a token, compute its deterministic value
-    const tokenText = hasToken
-      ? Math.floor(luck([i, j, "initialValue"].toString()) * 100).toString()
-      : "·";
+  // For performance: clear previous grid layers
+  if ((drawVisibleGrid as any)._layerGroup) {
+    (drawVisibleGrid as any)._layerGroup.clearLayers();
+  } else {
+    (drawVisibleGrid as any)._layerGroup = leaflet.layerGroup().addTo(map);
+  }
 
-    const label = leaflet.marker(cellCenterLatLng(i, j), {
-      icon: leaflet.divIcon({
-        className: "cell-label",
-        html: tokenText,
-      }),
-      interactive: false,
-    });
+  const layerGroup = (drawVisibleGrid as any)._layerGroup;
 
-    label.addTo(map);
+  // Draw cells covering all visible region
+  for (let i = iMin; i <= iMax; i++) {
+    for (let j = jMin; j <= jMax; j++) {
+      // Outline
+      leaflet
+        .rectangle(cellBounds(i, j), {
+          color: "#888",
+          weight: 1,
+          fillOpacity: 0,
+          interactive: false,
+        })
+        .addTo(layerGroup);
+
+      // Token or empty indicator
+      const hasToken = luck([i, j].toString()) < CACHE_SPAWN_PROBABILITY;
+      const tokenText = hasToken
+        ? Math.floor(luck([i, j, "initialValue"].toString()) * 100).toString()
+        : "·";
+
+      leaflet
+        .marker(cellCenterLatLng(i, j), {
+          icon: leaflet.divIcon({
+            className: "cell-label",
+            html: tokenText,
+          }),
+          interactive: false,
+        })
+        .addTo(layerGroup);
+    }
   }
 }
 
@@ -129,16 +159,30 @@ function spawnCache(i: number, j: number) {
   const rect = leaflet.rectangle(bounds);
   rect.addTo(map);
 
-  // Handle interactions with the cache
+  const di = Math.abs(i - PLAYER_I);
+  const dj = Math.abs(j - PLAYER_J);
+  const inRange = Math.max(di, dj) <= INTERACTION_RADIUS_CELLS;
+
   rect.bindPopup(() => {
-    // Each cache has a random point value, mutable by the player
-    let pointValue = Math.floor(luck([i, j, "initialValue"].toString()) * 100);
+    if (!inRange) {
+      // Too far: show non-interactive message
+      const popupDiv = document.createElement("div");
+      popupDiv.innerHTML = `
+        <div>There is a cache here at "${i},${j}", but it's too far away.</div>
+        <div>Move within ${INTERACTION_RADIUS_CELLS} cells to interact.</div>
+      `;
+      return popupDiv;
+    }
+
+    let pointValue = Math.floor(
+      luck([i, j, "initialValue"].toString()) * 100,
+    );
 
     // The popup offers a description and button
     const popupDiv = document.createElement("div");
     popupDiv.innerHTML = `
-                <div>There is a cache here at "${i},${j}". It has value <span id="value">${pointValue}</span>.</div>
-                <button id="poke">poke</button>`;
+        <div>There is a cache here at "${i},${j}". It has value <span id="value">${pointValue}</span>.</div>
+        <button id="poke">poke</button>`;
 
     // Clicking the button decrements the cache's value and increments the player's points
     popupDiv
@@ -164,3 +208,8 @@ for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
     }
   }
 }
+
+drawVisibleGrid();
+map.on("resize", drawVisibleGrid);
+map.on("moveend", drawVisibleGrid);
+map.on("zoomend", drawVisibleGrid);
