@@ -12,8 +12,8 @@
 
 ### Token Logic
 
-[ ] Implement deterministic token spawning using provided luck hash.
-[ ] Allow picking up at most one token and remove it from its cell.
+[x] Implement deterministic token spawning using provided luck hash.
+[x] Allow picking up at most one token and remove it from its cell.
 [ ] Display held token clearly on screen.
 [ ] Allow combining held token with equal-value token in a cell to produce doubled-value token.
 [ ] Detect victory when held token reaches target value (e.g. 8 or 16).

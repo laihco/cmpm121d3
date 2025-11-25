@@ -78,6 +78,32 @@ function cellCenterLatLng(i: number, j: number): leaflet.LatLng {
   );
 }
 
+// --- Token helpers & state ---
+
+function cellKey(i: number, j: number): string {
+  return `${i},${j}`;
+}
+
+// Deterministic initial token presence
+function hasInitialToken(i: number, j: number): boolean {
+  return luck([i, j, "tokenPresent"].toString()) < CACHE_SPAWN_PROBABILITY;
+}
+
+// Deterministic initial token value
+function initialTokenValue(i: number, j: number): number {
+  return Math.floor(luck([i, j, "tokenValue"].toString()) * 100);
+}
+
+// Tokens that have been picked up and removed from the map
+const removedTokens = new Set<string>();
+
+// Current world view: does this cell still have a token?
+function cellHasToken(i: number, j: number): boolean {
+  return hasInitialToken(i, j) && !removedTokens.has(cellKey(i, j));
+}
+
+let gridLayerGroup: leaflet.LayerGroup | null = null;
+
 function drawVisibleGrid() {
   const bounds = map.getBounds();
 
@@ -88,18 +114,18 @@ function drawVisibleGrid() {
   const jMax = lngToIndex(bounds.getEast());
 
   // For performance: clear previous grid layers
-  if ((drawVisibleGrid as any)._layerGroup) {
-    (drawVisibleGrid as any)._layerGroup.clearLayers();
+  if (gridLayerGroup) {
+    gridLayerGroup.clearLayers();
   } else {
-    (drawVisibleGrid as any)._layerGroup = leaflet.layerGroup().addTo(map);
+    gridLayerGroup = leaflet.layerGroup().addTo(map);
   }
 
-  const layerGroup = (drawVisibleGrid as any)._layerGroup;
+  const layerGroup = gridLayerGroup;
 
   // Draw cells covering all visible region
   for (let i = iMin; i <= iMax; i++) {
     for (let j = jMin; j <= jMax; j++) {
-      // Outline
+      // Outline (non-interactive so it doesn't block clicks)
       leaflet
         .rectangle(cellBounds(i, j), {
           color: "#888",
@@ -109,21 +135,19 @@ function drawVisibleGrid() {
         })
         .addTo(layerGroup);
 
-      // Token or empty indicator
-      const hasToken = luck([i, j].toString()) < CACHE_SPAWN_PROBABILITY;
-      const tokenText = hasToken
-        ? Math.floor(luck([i, j, "initialValue"].toString()) * 100).toString()
-        : "·";
-
-      leaflet
-        .marker(cellCenterLatLng(i, j), {
-          icon: leaflet.divIcon({
-            className: "cell-label",
-            html: tokenText,
-          }),
-          interactive: false,
-        })
-        .addTo(layerGroup);
+      // Only draw a label if this cell *currently* has a token
+      if (cellHasToken(i, j)) {
+        const tokenValue = initialTokenValue(i, j);
+        leaflet
+          .marker(cellCenterLatLng(i, j), {
+            icon: leaflet.divIcon({
+              className: "cell-label",
+              html: tokenValue.toString(),
+            }),
+            interactive: false,
+          })
+          .addTo(layerGroup);
+      }
     }
   }
 }
@@ -144,10 +168,14 @@ playerMarker.addTo(map);
 
 // Display the player's points
 let playerPoints = 0;
+let carriedToken: { i: number; j: number; value: number } | null = null;
 statusPanelDiv.innerHTML = "No points yet...";
 
 // Add caches to the map by cell numbers
 function spawnCache(i: number, j: number) {
+  // Only create a cache if this cell *initially* has a token
+  if (!hasInitialToken(i, j)) return;
+
   // Convert cell numbers into lat/lng bounds
   const origin = CLASSROOM_LATLNG;
   const bounds = leaflet.latLngBounds([
@@ -164,8 +192,11 @@ function spawnCache(i: number, j: number) {
   const inRange = Math.max(di, dj) <= INTERACTION_RADIUS_CELLS;
 
   rect.bindPopup(() => {
+    const key = cellKey(i, j);
+    const hasTokenNow = cellHasToken(i, j);
+
+    // Too far away
     if (!inRange) {
-      // Too far: show non-interactive message
       const popupDiv = document.createElement("div");
       popupDiv.innerHTML = `
         <div>There is a cache here at "${i},${j}", but it's too far away.</div>
@@ -174,25 +205,55 @@ function spawnCache(i: number, j: number) {
       return popupDiv;
     }
 
-    let pointValue = Math.floor(
-      luck([i, j, "initialValue"].toString()) * 100,
-    );
+    // Token already collected
+    if (!hasTokenNow) {
+      const popupDiv = document.createElement("div");
+      popupDiv.innerHTML = `
+        <div>The cache at "${i},${j}" is empty.</div>
+        <div>The token has already been collected.</div>
+      `;
+      return popupDiv;
+    }
 
-    // The popup offers a description and button
+    // Player already holding a token
+    if (carriedToken !== null) {
+      const popupDiv = document.createElement("div");
+      popupDiv.innerHTML = `
+        <div>There is a token here at "${i},${j}".</div>
+        <div>You are already carrying a token and can't pick up another.</div>
+      `;
+      return popupDiv;
+    }
+
+    // Normal case: in range, token present, hands free
+    const tokenValue = initialTokenValue(i, j);
+
     const popupDiv = document.createElement("div");
     popupDiv.innerHTML = `
-        <div>There is a cache here at "${i},${j}". It has value <span id="value">${pointValue}</span>.</div>
-        <button id="poke">poke</button>`;
+      <div>There is a token here at "${i},${j}".</div>
+      <div>It is worth <span id="value">${tokenValue}</span> points.</div>
+      <button id="pick">Pick up token</button>
+    `;
 
-    // Clicking the button decrements the cache's value and increments the player's points
     popupDiv
-      .querySelector<HTMLButtonElement>("#poke")!
+      .querySelector<HTMLButtonElement>("#pick")!
       .addEventListener("click", () => {
-        pointValue--;
-        popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML =
-          pointValue.toString();
-        playerPoints++;
-        statusPanelDiv.innerHTML = `${playerPoints} points accumulated`;
+        // Mark token as removed from this cell
+        removedTokens.add(key);
+
+        // Player now carries this token
+        carriedToken = { i, j, value: tokenValue };
+
+        // Optional: immediately add to score
+        playerPoints += tokenValue;
+        statusPanelDiv.innerHTML =
+          `${playerPoints} points accumulated (carrying token from ${i},${j})`;
+
+        // Refresh grid so label disappears
+        drawVisibleGrid();
+
+        // Close the popup
+        rect.closePopup();
       });
 
     return popupDiv;
@@ -202,8 +263,7 @@ function spawnCache(i: number, j: number) {
 // Look around the player's neighborhood for caches to spawn
 for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
   for (let j = -NEIGHBORHOOD_SIZE; j < NEIGHBORHOOD_SIZE; j++) {
-    // If location i,j is lucky enough, spawn a cache!
-    if (luck([i, j].toString()) < CACHE_SPAWN_PROBABILITY) {
+    if (hasInitialToken(i, j)) {
       spawnCache(i, j);
     }
   }
