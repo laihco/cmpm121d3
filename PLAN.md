@@ -6,7 +6,7 @@
 
 [x] Initialize Leaflet map centered at fixed classroom coordinates.
 [x] Render rectangular lat–long grid cells (fixed size, e.g. 0.0001°).
-[ ] Display token value or emptiness directly on each cell.
+[x] Display token value or emptiness directly on each cell.
 [ ] Ensure map shows cells out to full visible bounds.
 [ ] Restrict interaction to cells within ~3 grid steps of player.
 

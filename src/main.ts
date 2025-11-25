@@ -57,9 +57,19 @@ function cellBounds(i: number, j: number): leaflet.LatLngBoundsExpression {
   ];
 }
 
+// Center point of a grid cell (i, j)
+function cellCenterLatLng(i: number, j: number): leaflet.LatLng {
+  const origin = CLASSROOM_LATLNG;
+  return leaflet.latLng(
+    origin.lat + (i + 0.5) * TILE_DEGREES,
+    origin.lng + (j + 0.5) * TILE_DEGREES,
+  );
+}
+
 // Draw a visible grid over the neighborhood
 for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
   for (let j = -NEIGHBORHOOD_SIZE; j < NEIGHBORHOOD_SIZE; j++) {
+    // Draw the cell outline
     leaflet
       .rectangle(cellBounds(i, j), {
         color: "#888",
@@ -67,6 +77,24 @@ for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
         fillOpacity: 0,
       })
       .addTo(map);
+
+    // Decide if this cell has a token (same rule as cache spawning)
+    const hasToken = luck([i, j].toString()) < CACHE_SPAWN_PROBABILITY;
+
+    // If it has a token, compute its deterministic value
+    const tokenText = hasToken
+      ? Math.floor(luck([i, j, "initialValue"].toString()) * 100).toString()
+      : "·";
+
+    const label = leaflet.marker(cellCenterLatLng(i, j), {
+      icon: leaflet.divIcon({
+        className: "cell-label",
+        html: tokenText,
+      }),
+      interactive: false,
+    });
+
+    label.addTo(map);
   }
 }
 
