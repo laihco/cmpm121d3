@@ -38,6 +38,8 @@ const TILE_DEGREES = 1e-4;
 const NEIGHBORHOOD_SIZE = 8;
 const CACHE_SPAWN_PROBABILITY = 0.1;
 const INTERACTION_RADIUS_CELLS = 3;
+const VICTORY_TARGET_VALUE = 16;
+let hasWon = false;
 
 function latToIndex(lat: number): number {
   return Math.floor((lat - CLASSROOM_LATLNG.lat) / TILE_DEGREES);
@@ -116,10 +118,6 @@ function currentTokenValue(i: number, j: number): number | null {
   return null;
 }
 
-function cellHasToken(i: number, j: number): boolean {
-  return currentTokenValue(i, j) !== null;
-}
-
 let gridLayerGroup: leaflet.LayerGroup | null = null;
 
 function drawVisibleGrid() {
@@ -196,6 +194,18 @@ function updateStatusPanel() {
 
 updateStatusPanel();
 
+function checkVictory() {
+  if (!carriedToken || hasWon) return;
+
+  if (carriedToken.value >= VICTORY_TARGET_VALUE) {
+    hasWon = true;
+
+    // Simple victory message in the status panel
+    statusPanelDiv.innerHTML +=
+      ` | 🎉 Victory! Held token reached ${carriedToken.value} points.`;
+  }
+}
+
 // Add caches to the map by cell numbers
 function spawnCache(i: number, j: number) {
   // Only create a cache if this cell *initially* has a token
@@ -241,7 +251,6 @@ function spawnCache(i: number, j: number) {
 
     // Player is holding a token already
     if (carriedToken !== null) {
-      // Can we combine? equal-value tokens
       if (carriedToken.value === valueHere) {
         const popupDiv = document.createElement("div");
         popupDiv.innerHTML = `
@@ -303,6 +312,7 @@ function spawnCache(i: number, j: number) {
         // Award points immediately (or move this to a "cash in" mechanic later)
         playerPoints += valueHere;
         updateStatusPanel();
+        checkVictory();
 
         // Refresh grid so label disappears
         drawVisibleGrid();
