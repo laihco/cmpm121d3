@@ -157,21 +157,36 @@ function initialTokenValue(i: number, j: number): number {
   return Math.floor(luck([i, j, "tokenValue"].toString()) * 100);
 }
 
-// Tokens that have been picked up and removed from the map
-const removedTokens = new Set<string>();
+// Memento-style state for modified cells only
+type CellState = {
+  removed: boolean; // true if token has been taken
+  valueOverride: number | null; // if set, this is the current token value
+};
 
-// Cells whose token value has been changed (e.g., combined)
-const tokenOverrides = new Map<string, number>();
+// Only cells that have been modified get entries here (Flyweight-ish)
+const cellStates = new Map<string, CellState>();
+
+function getCellState(i: number, j: number): CellState | undefined {
+  return cellStates.get(cellKey(i, j));
+}
+
+function ensureCellState(i: number, j: number): CellState {
+  const key = cellKey(i, j);
+  let state = cellStates.get(key);
+  if (!state) {
+    state = { removed: false, valueOverride: null };
+    cellStates.set(key, state);
+  }
+  return state;
+}
 
 // Current token value in this cell, or null if no token
 function currentTokenValue(i: number, j: number): number | null {
-  const key = cellKey(i, j);
-  if (removedTokens.has(key)) return null;
+  const state = getCellState(i, j);
+  if (state?.removed) return null;
+  if (state?.valueOverride != null) return state.valueOverride;
 
-  if (tokenOverrides.has(key)) {
-    return tokenOverrides.get(key)!;
-  }
-
+  // Unmodified cells are computed on demand from luck (no stored memory)
   if (hasInitialToken(i, j)) {
     return initialTokenValue(i, j);
   }
@@ -189,32 +204,6 @@ function drawVisibleGrid() {
   const iMax = latToIndex(bounds.getNorth());
   const jMin = lngToIndex(bounds.getWest());
   const jMax = lngToIndex(bounds.getEast());
-
-  // --- NEW: make cells "memoryless" when off-screen ---
-
-  // Collect all keys for cells that are currently visible
-  const visibleKeys = new Set<string>();
-  for (let i = iMin; i <= iMax; i++) {
-    for (let j = jMin; j <= jMax; j++) {
-      visibleKeys.add(cellKey(i, j));
-    }
-  }
-
-  // Drop removedTokens entries for cells that are no longer visible
-  for (const key of Array.from(removedTokens)) {
-    if (!visibleKeys.has(key)) {
-      removedTokens.delete(key);
-    }
-  }
-
-  // Drop tokenOverrides entries for cells that are no longer visible
-  for (const key of Array.from(tokenOverrides.keys())) {
-    if (!visibleKeys.has(key)) {
-      tokenOverrides.delete(key);
-    }
-  }
-
-  // --- Existing grid drawing code ---
 
   // For performance: clear previous grid layers
   if (gridLayerGroup) {
@@ -318,7 +307,6 @@ function spawnCache(i: number, j: number) {
     const dj = Math.abs(j - playerJ);
     const inRange = Math.max(di, dj) <= INTERACTION_RADIUS_CELLS;
 
-    const key = cellKey(i, j);
     const valueHere = currentTokenValue(i, j);
 
     // Too far away
@@ -356,8 +344,9 @@ function spawnCache(i: number, j: number) {
         popupDiv
           .querySelector<HTMLButtonElement>("#combine")!
           .addEventListener("click", () => {
-            // New doubled token stays in this cell
-            tokenOverrides.set(key, valueHere * 2);
+            const state = ensureCellState(i, j);
+            state.removed = false;
+            state.valueOverride = valueHere * 2;
 
             // The held token is consumed
             carriedToken = null;
@@ -394,8 +383,9 @@ function spawnCache(i: number, j: number) {
     popupDiv
       .querySelector<HTMLButtonElement>("#pick")!
       .addEventListener("click", () => {
-        // Remove token from this cell
-        removedTokens.add(key);
+        const state = ensureCellState(i, j);
+        state.removed = true;
+        state.valueOverride = null;
 
         // Player now carries this token
         carriedToken = { i, j, value: valueHere };

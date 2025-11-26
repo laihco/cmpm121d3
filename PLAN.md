@@ -31,28 +31,11 @@
 [x] Only cells near the character are interactable.
 [x] Increase victory threshold to require higher crafting value.
 
-### Technical Tools
-
-[ ] Create data type for cell coordinates (i,j).
-[ ] Implement conversion between lat/long ↔ cell (i,j) ↔ cell bounds.
-[ ] Use Leaflet moveend event to update visible cells.
-
 ## D3.c — Object Persistence
 
-### Storage & Memory
+### Map
 
-[ ] Apply Flyweight or similar strategy so unmodified off-screen cells need no storage.
-[ ] Use Memento-style serialization to store modified cell states.
-[ ] Restore modified cell state when previously modified cell comes back into view.
-
-### Gameplay
-
-[ ] Cells retain modified state across visibility changes.
-[ ] In-session persistence only (no page reload persistence yet).
-
-### Rendering
-
-[ ] Rebuild visible grid on each map movement using stored state + deterministic default values.
+[x] Cells appear to remember their state as you move around the map (within a single page load).
 
 ## D3.d — Real-world Space & Time
 
