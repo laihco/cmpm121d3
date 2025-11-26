@@ -23,16 +23,13 @@
 ### Movement & World
 
 [x] Add buttons to move player N/S/E/W by one grid cell.
-[ ] Spawn/despawn cells so screen is always filled with grid cells.
-[ ] Use global coordinate system anchored at Null Island (0,0).
-[ ] Reset cells when they leave visibility (no memory yet; allow farming).
+[x] Reset cells when they leave visibility (no memory yet; allow farming).
 
 ### Interaction Rules
 
-[ ] Player can scroll map independently of player movement.
-[ ] Only cells near the character are interactable.
-[ ] Farming is allowed: cells respawn fresh when re-entered.
-[ ] Increase victory threshold to require higher crafting value.
+[x] Player can scroll map independently of player movement.
+[x] Only cells near the character are interactable.
+[x] Increase victory threshold to require higher crafting value.
 
 ### Technical Tools
 

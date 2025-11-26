@@ -99,7 +99,7 @@ const TILE_DEGREES = 1e-4;
 const NEIGHBORHOOD_SIZE = 8;
 const CACHE_SPAWN_PROBABILITY = 0.1;
 const INTERACTION_RADIUS_CELLS = 3;
-const VICTORY_TARGET_VALUE = 16;
+const VICTORY_TARGET_VALUE = 250;
 let hasWon = false;
 
 function latToIndex(lat: number): number {
@@ -189,6 +189,32 @@ function drawVisibleGrid() {
   const iMax = latToIndex(bounds.getNorth());
   const jMin = lngToIndex(bounds.getWest());
   const jMax = lngToIndex(bounds.getEast());
+
+  // --- NEW: make cells "memoryless" when off-screen ---
+
+  // Collect all keys for cells that are currently visible
+  const visibleKeys = new Set<string>();
+  for (let i = iMin; i <= iMax; i++) {
+    for (let j = jMin; j <= jMax; j++) {
+      visibleKeys.add(cellKey(i, j));
+    }
+  }
+
+  // Drop removedTokens entries for cells that are no longer visible
+  for (const key of Array.from(removedTokens)) {
+    if (!visibleKeys.has(key)) {
+      removedTokens.delete(key);
+    }
+  }
+
+  // Drop tokenOverrides entries for cells that are no longer visible
+  for (const key of Array.from(tokenOverrides.keys())) {
+    if (!visibleKeys.has(key)) {
+      tokenOverrides.delete(key);
+    }
+  }
+
+  // --- Existing grid drawing code ---
 
   // For performance: clear previous grid layers
   if (gridLayerGroup) {
