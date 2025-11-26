@@ -97,9 +97,27 @@ function initialTokenValue(i: number, j: number): number {
 // Tokens that have been picked up and removed from the map
 const removedTokens = new Set<string>();
 
-// Current world view: does this cell still have a token?
+// Cells whose token value has been changed (e.g., combined)
+const tokenOverrides = new Map<string, number>();
+
+// Current token value in this cell, or null if no token
+function currentTokenValue(i: number, j: number): number | null {
+  const key = cellKey(i, j);
+  if (removedTokens.has(key)) return null;
+
+  if (tokenOverrides.has(key)) {
+    return tokenOverrides.get(key)!;
+  }
+
+  if (hasInitialToken(i, j)) {
+    return initialTokenValue(i, j);
+  }
+
+  return null;
+}
+
 function cellHasToken(i: number, j: number): boolean {
-  return hasInitialToken(i, j) && !removedTokens.has(cellKey(i, j));
+  return currentTokenValue(i, j) !== null;
 }
 
 let gridLayerGroup: leaflet.LayerGroup | null = null;
@@ -135,14 +153,13 @@ function drawVisibleGrid() {
         })
         .addTo(layerGroup);
 
-      // Only draw a label if this cell *currently* has a token
-      if (cellHasToken(i, j)) {
-        const tokenValue = initialTokenValue(i, j);
+      const value = currentTokenValue(i, j);
+      if (value !== null) {
         leaflet
           .marker(cellCenterLatLng(i, j), {
             icon: leaflet.divIcon({
               className: "cell-label",
-              html: tokenValue.toString(),
+              html: value.toString(),
             }),
             interactive: false,
           })
@@ -166,10 +183,18 @@ const playerMarker = leaflet.marker(CLASSROOM_LATLNG);
 playerMarker.bindTooltip("That's you!");
 playerMarker.addTo(map);
 
-// Display the player's points
+// Display the player's points and held token
 let playerPoints = 0;
 let carriedToken: { i: number; j: number; value: number } | null = null;
-statusPanelDiv.innerHTML = "No points yet...";
+
+function updateStatusPanel() {
+  const heldText = carriedToken
+    ? `${carriedToken.value} pts (from ${carriedToken.i},${carriedToken.j})`
+    : "None";
+  statusPanelDiv.innerHTML = `Score: ${playerPoints} | Held token: ${heldText}`;
+}
+
+updateStatusPanel();
 
 // Add caches to the map by cell numbers
 function spawnCache(i: number, j: number) {
@@ -193,7 +218,7 @@ function spawnCache(i: number, j: number) {
 
   rect.bindPopup(() => {
     const key = cellKey(i, j);
-    const hasTokenNow = cellHasToken(i, j);
+    const valueHere = currentTokenValue(i, j);
 
     // Too far away
     if (!inRange) {
@@ -205,54 +230,83 @@ function spawnCache(i: number, j: number) {
       return popupDiv;
     }
 
-    // Token already collected
-    if (!hasTokenNow) {
+    // No token here anymore
+    if (valueHere === null) {
       const popupDiv = document.createElement("div");
       popupDiv.innerHTML = `
         <div>The cache at "${i},${j}" is empty.</div>
-        <div>The token has already been collected.</div>
       `;
       return popupDiv;
     }
 
-    // Player already holding a token
+    // Player is holding a token already
     if (carriedToken !== null) {
-      const popupDiv = document.createElement("div");
-      popupDiv.innerHTML = `
-        <div>There is a token here at "${i},${j}".</div>
-        <div>You are already carrying a token and can't pick up another.</div>
-      `;
-      return popupDiv;
+      // Can we combine? equal-value tokens
+      if (carriedToken.value === valueHere) {
+        const popupDiv = document.createElement("div");
+        popupDiv.innerHTML = `
+          <div>You are holding a ${carriedToken.value}-point token.</div>
+          <div>There is also a ${valueHere}-point token here at "${i},${j}".</div>
+          <div>Combine them into a ${
+          valueHere * 2
+        }-point token in this cell?</div>
+          <button id="combine">Combine tokens</button>
+        `;
+
+        popupDiv
+          .querySelector<HTMLButtonElement>("#combine")!
+          .addEventListener("click", () => {
+            // New doubled token stays in this cell
+            tokenOverrides.set(key, valueHere * 2);
+
+            // The held token is consumed
+            carriedToken = null;
+
+            // (Score doesn't change here; player must pick up later if you want.)
+            updateStatusPanel();
+
+            // Redraw grid so label updates
+            drawVisibleGrid();
+
+            rect.closePopup();
+          });
+
+        return popupDiv;
+      } else {
+        // Values don't match: cannot combine, cannot pick up another
+        const popupDiv = document.createElement("div");
+        popupDiv.innerHTML = `
+          <div>There is a ${valueHere}-point token here at "${i},${j}".</div>
+          <div>You are already holding a ${carriedToken.value}-point token,</div>
+          <div>and only equal-value tokens can be combined.</div>
+        `;
+        return popupDiv;
+      }
     }
 
-    // Normal case: in range, token present, hands free
-    const tokenValue = initialTokenValue(i, j);
-
+    // Normal case: in range, token present, hands free -> pick up
     const popupDiv = document.createElement("div");
     popupDiv.innerHTML = `
-      <div>There is a token here at "${i},${j}".</div>
-      <div>It is worth <span id="value">${tokenValue}</span> points.</div>
+      <div>There is a ${valueHere}-point token here at "${i},${j}".</div>
       <button id="pick">Pick up token</button>
     `;
 
     popupDiv
       .querySelector<HTMLButtonElement>("#pick")!
       .addEventListener("click", () => {
-        // Mark token as removed from this cell
+        // Remove token from this cell
         removedTokens.add(key);
 
         // Player now carries this token
-        carriedToken = { i, j, value: tokenValue };
+        carriedToken = { i, j, value: valueHere };
 
-        // Optional: immediately add to score
-        playerPoints += tokenValue;
-        statusPanelDiv.innerHTML =
-          `${playerPoints} points accumulated (carrying token from ${i},${j})`;
+        // Award points immediately (or move this to a "cash in" mechanic later)
+        playerPoints += valueHere;
+        updateStatusPanel();
 
         // Refresh grid so label disappears
         drawVisibleGrid();
 
-        // Close the popup
         rect.closePopup();
       });
 
