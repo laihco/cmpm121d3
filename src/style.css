@@ -19,3 +19,24 @@
   border: none;
   pointer-events: none;
 }
+
+#dpad {
+  display: inline-grid;
+  grid-template-columns: repeat(3, 40px);
+  grid-template-rows: repeat(3, 40px);
+  gap: 4px;
+  margin: 0.5rem;
+}
+
+#dpad > div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#dpad button {
+  width: 100%;
+  height: 100%;
+  font-size: 1.1rem;
+  cursor: pointer;
+}

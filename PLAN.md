@@ -22,7 +22,7 @@
 
 ### Movement & World
 
-[ ] Add buttons to move player N/S/E/W by one grid cell.
+[x] Add buttons to move player N/S/E/W by one grid cell.
 [ ] Spawn/despawn cells so screen is always filled with grid cells.
 [ ] Use global coordinate system anchored at Null Island (0,0).
 [ ] Reset cells when they leave visibility (no memory yet; allow farming).

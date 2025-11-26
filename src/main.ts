@@ -26,6 +26,67 @@ const statusPanelDiv = document.createElement("div");
 statusPanelDiv.id = "statusPanel";
 document.body.append(statusPanelDiv);
 
+//Movement controls
+
+const dpad = document.createElement("div");
+dpad.id = "dpad";
+
+// Create buttons
+const moveNorthBtn = document.createElement("button");
+moveNorthBtn.textContent = "▲";
+
+const moveSouthBtn = document.createElement("button");
+moveSouthBtn.textContent = "▼";
+
+const moveWestBtn = document.createElement("button");
+moveWestBtn.textContent = "◀";
+
+const moveEastBtn = document.createElement("button");
+moveEastBtn.textContent = "▶";
+
+// Helper to make a 3×3 grid cell
+function makeCell(child: HTMLElement | null): HTMLDivElement {
+  const cell = document.createElement("div");
+  if (child) cell.appendChild(child);
+  return cell;
+}
+
+// Row 1: [ empty, N, empty ]
+dpad.appendChild(makeCell(null));
+dpad.appendChild(makeCell(moveNorthBtn));
+dpad.appendChild(makeCell(null));
+
+// Row 2: [ W, empty, E ]
+dpad.appendChild(makeCell(moveWestBtn));
+dpad.appendChild(makeCell(null));
+dpad.appendChild(makeCell(moveEastBtn));
+
+// Row 3: [ empty, S, empty ]
+dpad.appendChild(makeCell(null));
+dpad.appendChild(makeCell(moveSouthBtn));
+dpad.appendChild(makeCell(null));
+
+controlPanelDiv.appendChild(dpad);
+
+// Helper to move player by grid offsets (dI, dJ)
+function movePlayer(dI: number, dJ: number) {
+  playerI += dI;
+  playerJ += dJ;
+
+  const newPos = cellCenterLatLng(playerI, playerJ);
+
+  playerMarker.setLatLng(newPos);
+  map.panTo(newPos);
+
+  drawVisibleGrid();
+}
+
+// Wire up buttons
+moveNorthBtn.addEventListener("click", () => movePlayer(1, 0)); // north
+moveSouthBtn.addEventListener("click", () => movePlayer(-1, 0)); // south
+moveEastBtn.addEventListener("click", () => movePlayer(0, 1)); // east
+moveWestBtn.addEventListener("click", () => movePlayer(0, -1)); // west
+
 // Our classroom location
 const CLASSROOM_LATLNG = leaflet.latLng(
   36.997936938057016,
@@ -49,8 +110,8 @@ function lngToIndex(lng: number): number {
   return Math.floor((lng - CLASSROOM_LATLNG.lng) / TILE_DEGREES);
 }
 
-const PLAYER_I = latToIndex(CLASSROOM_LATLNG.lat);
-const PLAYER_J = lngToIndex(CLASSROOM_LATLNG.lng);
+let playerI = latToIndex(CLASSROOM_LATLNG.lat);
+let playerJ = lngToIndex(CLASSROOM_LATLNG.lng);
 
 // Create the map (element with id "map" is defined in index.html)
 const map = leaflet.map(mapDiv, {
@@ -177,7 +238,7 @@ leaflet
   .addTo(map);
 
 // Add a marker to represent the player
-const playerMarker = leaflet.marker(CLASSROOM_LATLNG);
+const playerMarker = leaflet.marker(cellCenterLatLng(playerI, playerJ));
 playerMarker.bindTooltip("That's you!");
 playerMarker.addTo(map);
 
@@ -189,7 +250,13 @@ function updateStatusPanel() {
   const heldText = carriedToken
     ? `${carriedToken.value} pts (from ${carriedToken.i},${carriedToken.j})`
     : "None";
-  statusPanelDiv.innerHTML = `Score: ${playerPoints} | Held token: ${heldText}`;
+
+  const victoryText = hasWon
+    ? ` | 🎉 Victory! Held token reached at least ${VICTORY_TARGET_VALUE} points.`
+    : "";
+
+  statusPanelDiv.innerHTML =
+    `Score: ${playerPoints} | Held token: ${heldText}${victoryText}`;
 }
 
 updateStatusPanel();
@@ -199,10 +266,7 @@ function checkVictory() {
 
   if (carriedToken.value >= VICTORY_TARGET_VALUE) {
     hasWon = true;
-
-    // Simple victory message in the status panel
-    statusPanelDiv.innerHTML +=
-      ` | 🎉 Victory! Held token reached ${carriedToken.value} points.`;
+    updateStatusPanel();
   }
 }
 
@@ -222,11 +286,12 @@ function spawnCache(i: number, j: number) {
   const rect = leaflet.rectangle(bounds);
   rect.addTo(map);
 
-  const di = Math.abs(i - PLAYER_I);
-  const dj = Math.abs(j - PLAYER_J);
-  const inRange = Math.max(di, dj) <= INTERACTION_RADIUS_CELLS;
-
   rect.bindPopup(() => {
+    // Recompute distance using *current* player position
+    const di = Math.abs(i - playerI);
+    const dj = Math.abs(j - playerJ);
+    const inRange = Math.max(di, dj) <= INTERACTION_RADIUS_CELLS;
+
     const key = cellKey(i, j);
     const valueHere = currentTokenValue(i, j);
 
