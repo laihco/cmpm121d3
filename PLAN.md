@@ -39,18 +39,7 @@
 
 ## D3.d — Real-world Space & Time
 
-### Player Movement
-
-[ ] Integrate browser Geolocation API to move player based on real-world location.
-[ ] Wrap movement logic in a Facade-style interface separating input source.
-[ ] Add way to switch between geolocation and button-based movement (UI or query string).
-
-### Persistence
-
-[ ] Use localStorage to store game state across sessions (cells, player pos, held token).
-[ ] Provide UI option to start a new game and clear saved data.
-
-### Gameplay2
-
-[ ] Player moves by real-world device motion.
+[x] Player moves by real-world device motion.
 [ ] Game fully resumes after tab close and reopen.
+[ ] The player needs some way to start a new game.
+[ ] The player needs some way to switch between button-based and geolocation-based movement.

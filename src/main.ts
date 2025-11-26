@@ -68,10 +68,10 @@ dpad.appendChild(makeCell(null));
 
 controlPanelDiv.appendChild(dpad);
 
-// Helper to move player by grid offsets (dI, dJ)
-function movePlayer(dI: number, dJ: number) {
-  playerI += dI;
-  playerJ += dJ;
+// Helper to set the player to a specific grid cell (absolute move)
+function setPlayerCell(i: number, j: number) {
+  playerI = i;
+  playerJ = j;
 
   const newPos = cellCenterLatLng(playerI, playerJ);
 
@@ -79,6 +79,11 @@ function movePlayer(dI: number, dJ: number) {
   map.panTo(newPos);
 
   drawVisibleGrid();
+}
+
+// Helper to move player by grid offsets (dI, dJ)
+function movePlayer(dI: number, dJ: number) {
+  setPlayerCell(playerI + dI, playerJ + dJ);
 }
 
 // Wire up buttons
@@ -256,6 +261,33 @@ leaflet
 const playerMarker = leaflet.marker(cellCenterLatLng(playerI, playerJ));
 playerMarker.bindTooltip("That's you!");
 playerMarker.addTo(map);
+
+//Real-world movement via device GPS
+
+if ("geolocation" in navigator) {
+  navigator.geolocation.watchPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+
+      // Convert real-world lat/lng to our grid indices
+      const newI = latToIndex(lat);
+      const newJ = lngToIndex(lng);
+
+      setPlayerCell(newI, newJ);
+    },
+    (err) => {
+      console.warn("Geolocation error:", err);
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 1000,
+      timeout: 10000,
+    },
+  );
+} else {
+  console.warn("Geolocation not supported in this browser.");
+}
 
 // Display the player's points and held token
 let playerPoints = 0;
