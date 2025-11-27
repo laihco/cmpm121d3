@@ -40,6 +40,6 @@
 ## D3.d — Real-world Space & Time
 
 [x] Player moves by real-world device motion.
-[ ] Game fully resumes after tab close and reopen.
+[x] Game fully resumes after tab close and reopen.
 [ ] The player needs some way to start a new game.
 [ ] The player needs some way to switch between button-based and geolocation-based movement.

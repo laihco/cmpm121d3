@@ -79,6 +79,7 @@ function setPlayerCell(i: number, j: number) {
   map.panTo(newPos);
 
   drawVisibleGrid();
+  saveGameState();
 }
 
 // Helper to move player by grid offsets (dI, dJ)
@@ -314,8 +315,69 @@ function checkVictory() {
   if (carriedToken.value >= VICTORY_TARGET_VALUE) {
     hasWon = true;
     updateStatusPanel();
+    saveGameState();
   }
 }
+
+const STORAGE_KEY = "psGoGameState";
+
+type SavedState = {
+  playerI: number;
+  playerJ: number;
+  playerPoints: number;
+  hasWon: boolean;
+  carriedToken: { i: number; j: number; value: number } | null;
+  cellStates: Array<[string, CellState]>;
+};
+
+function saveGameState() {
+  if (!("localStorage" in window)) return;
+
+  const data: SavedState = {
+    playerI,
+    playerJ,
+    playerPoints,
+    hasWon,
+    carriedToken,
+    cellStates: Array.from(cellStates.entries()),
+  };
+
+  try {
+    self.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (err) {
+    console.warn("Failed to save game state:", err);
+  }
+}
+
+function loadGameState() {
+  if (!("localStorage" in window)) return;
+
+  const raw = self.localStorage.getItem(STORAGE_KEY);
+  if (!raw) return;
+
+  try {
+    const data = JSON.parse(raw) as SavedState;
+
+    if (typeof data.playerI === "number") playerI = data.playerI;
+    if (typeof data.playerJ === "number") playerJ = data.playerJ;
+    if (typeof data.playerPoints === "number") playerPoints = data.playerPoints;
+    if (typeof data.hasWon === "boolean") hasWon = data.hasWon;
+
+    carriedToken = data.carriedToken ?? null;
+
+    cellStates.clear();
+    if (Array.isArray(data.cellStates)) {
+      for (const [key, state] of data.cellStates) {
+        cellStates.set(key, state);
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to load game state:", err);
+  }
+}
+
+// Make sure we save if the tab is about to close
+self.addEventListener("beforeunload", saveGameState);
 
 // Add caches to the map by cell numbers
 function spawnCache(i: number, j: number) {
@@ -388,6 +450,7 @@ function spawnCache(i: number, j: number) {
 
             // Redraw grid so label updates
             drawVisibleGrid();
+            saveGameState();
 
             rect.closePopup();
           });
@@ -429,6 +492,7 @@ function spawnCache(i: number, j: number) {
 
         // Refresh grid so label disappears
         drawVisibleGrid();
+        saveGameState();
 
         rect.closePopup();
       });
@@ -436,6 +500,10 @@ function spawnCache(i: number, j: number) {
     return popupDiv;
   });
 }
+
+loadGameState();
+setPlayerCell(playerI, playerJ);
+updateStatusPanel();
 
 // Look around the player's neighborhood for caches to spawn
 for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
