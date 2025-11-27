@@ -26,6 +26,13 @@ const statusPanelDiv = document.createElement("div");
 statusPanelDiv.id = "statusPanel";
 document.body.append(statusPanelDiv);
 
+// deno-lint-ignore prefer-const
+let playerMarker: leaflet.Marker;
+
+// movement mode state
+type MovementMode = "buttons" | "geolocation";
+let geoWatchId: number | null = null;
+
 //Movement controls
 
 const dpad = document.createElement("div");
@@ -67,6 +74,93 @@ dpad.appendChild(makeCell(moveSouthBtn));
 dpad.appendChild(makeCell(null));
 
 controlPanelDiv.appendChild(dpad);
+
+// Movement mode selector
+const movementLabel = document.createElement("label");
+movementLabel.textContent = "Movement: ";
+
+const movementSelect = document.createElement("select");
+
+const optButtons = document.createElement("option");
+optButtons.value = "buttons";
+optButtons.textContent = "Buttons (D-pad)";
+
+const optGeo = document.createElement("option");
+optGeo.value = "geolocation";
+optGeo.textContent = "Geolocation";
+
+movementSelect.appendChild(optButtons);
+movementSelect.appendChild(optGeo);
+movementSelect.value = "buttons";
+
+movementLabel.appendChild(movementSelect);
+controlPanelDiv.appendChild(movementLabel);
+
+// New Game button
+const newGameBtn = document.createElement("button");
+newGameBtn.textContent = "New Game";
+controlPanelDiv.appendChild(newGameBtn);
+newGameBtn.addEventListener("click", () => {
+  startNewGame();
+});
+
+function setButtonsEnabled(enabled: boolean) {
+  moveNorthBtn.disabled = !enabled;
+  moveSouthBtn.disabled = !enabled;
+  moveWestBtn.disabled = !enabled;
+  moveEastBtn.disabled = !enabled;
+}
+
+function enableGeolocationMovement() {
+  if (!("geolocation" in navigator)) {
+    alert("Geolocation not supported in this browser.");
+    movementSelect.value = "buttons";
+    return;
+  }
+  if (geoWatchId !== null) return;
+
+  geoWatchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+
+      const newI = latToIndex(lat);
+      const newJ = lngToIndex(lng);
+
+      setPlayerCell(newI, newJ);
+    },
+    (err) => {
+      console.warn("Geolocation error:", err);
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 1000,
+      timeout: 10000,
+    },
+  );
+}
+
+function disableGeolocationMovement() {
+  if (geoWatchId !== null && "geolocation" in navigator) {
+    navigator.geolocation.clearWatch(geoWatchId);
+  }
+  geoWatchId = null;
+}
+
+movementSelect.addEventListener("change", () => {
+  const mode = movementSelect.value as MovementMode;
+
+  if (mode === "buttons") {
+    disableGeolocationMovement();
+    setButtonsEnabled(true);
+  } else {
+    setButtonsEnabled(false);
+    enableGeolocationMovement();
+  }
+});
+
+// default: buttons enabled
+setButtonsEnabled(true);
 
 // Helper to set the player to a specific grid cell (absolute move)
 function setPlayerCell(i: number, j: number) {
@@ -259,7 +353,7 @@ leaflet
   .addTo(map);
 
 // Add a marker to represent the player
-const playerMarker = leaflet.marker(cellCenterLatLng(playerI, playerJ));
+playerMarker = leaflet.marker(cellCenterLatLng(playerI, playerJ));
 playerMarker.bindTooltip("That's you!");
 playerMarker.addTo(map);
 
@@ -308,6 +402,25 @@ function updateStatusPanel() {
 }
 
 updateStatusPanel();
+
+function startNewGame() {
+  // Clear persisted state
+  if ("localStorage" in globalThis) {
+    globalThis.localStorage.removeItem(STORAGE_KEY);
+  }
+
+  // Reset runtime state
+  playerI = latToIndex(CLASSROOM_LATLNG.lat);
+  playerJ = lngToIndex(CLASSROOM_LATLNG.lng);
+  playerPoints = 0;
+  carriedToken = null;
+  hasWon = false;
+  cellStates.clear();
+
+  setPlayerCell(playerI, playerJ);
+  updateStatusPanel();
+  saveGameState();
+}
 
 function checkVictory() {
   if (!carriedToken || hasWon) return;

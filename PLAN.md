@@ -41,5 +41,5 @@
 
 [x] Player moves by real-world device motion.
 [x] Game fully resumes after tab close and reopen.
-[ ] The player needs some way to start a new game.
-[ ] The player needs some way to switch between button-based and geolocation-based movement.
+[x] The player needs some way to start a new game.
+[x] The player needs some way to switch between button-based and geolocation-based movement.
